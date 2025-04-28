@@ -1,1 +1,5 @@
+
 project_id = "uifggdiglhltnvwthdqp"
+
+[functions.test-smtp]
+verify_jwt = false

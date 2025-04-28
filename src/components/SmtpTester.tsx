@@ -2,6 +2,8 @@
 import React, { useState } from "react";
 import SmtpForm from "./SmtpForm";
 import ResultDisplay from "./ResultDisplay";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface SmtpFormData {
   host: string;
@@ -24,68 +26,55 @@ const SmtpTester: React.FC = () => {
     logs: string[];
     timestamp?: string;
   } | null>(null);
+  const { toast } = useToast();
 
   const handleTest = async (data: SmtpFormData) => {
     setStatus("loading");
     
-    // In a real implementation, this would be an API call to a backend service
-    // that would perform the actual SMTP test. Since we're just in the frontend,
-    // we'll simulate a test with a timeout.
-    
-    // Simulate network request delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Generate some fake logs
-    const logs = [
-      `[${new Date().toISOString()}] Starting SMTP test for ${data.host}:${data.port}`,
-      `[${new Date().toISOString()}] Attempting to connect with ${data.encryption} encryption`,
-    ];
-    
-    if (data.auth) {
-      logs.push(`[${new Date().toISOString()}] Using authentication with username: ${data.username}`);
-    }
-    
-    // Simulate different testing scenarios based on the hostname
-    // This is just for demo purposes - in a real app this would be actual test results
-    if (data.host.includes("error")) {
-      logs.push(`[${new Date().toISOString()}] ERROR: Connection refused`);
+    try {
+      const { data: responseData, error } = await supabase.functions.invoke("test-smtp", {
+        body: data,
+      });
+      
+      if (error) {
+        console.error("Error invoking function:", error);
+        setResult({
+          success: false,
+          message: `Error: ${error.message}`,
+          logs: [`[${new Date().toISOString()}] ERROR: ${error.message}`],
+          timestamp: new Date().toLocaleTimeString(),
+        });
+        setStatus("error");
+        toast({
+          variant: "destructive",
+          title: "SMTP Test Failed",
+          description: error.message
+        });
+        return;
+      }
+
+      setResult(responseData);
+      setStatus(responseData.success ? "success" : "error");
+      
+      toast({
+        variant: responseData.success ? "default" : "destructive",
+        title: responseData.success ? "SMTP Test Completed" : "SMTP Test Failed",
+        description: responseData.message,
+      });
+    } catch (err) {
+      console.error("Unexpected error:", err);
       setResult({
         success: false,
-        message: "Failed to connect to SMTP server. Connection refused.",
-        logs,
+        message: `Unexpected error: ${err.message}`,
+        logs: [`[${new Date().toISOString()}] ERROR: ${err.message}`],
         timestamp: new Date().toLocaleTimeString(),
       });
       setStatus("error");
-    } else if (data.host.includes("timeout")) {
-      logs.push(`[${new Date().toISOString()}] ERROR: Connection timeout`);
-      setResult({
-        success: false,
-        message: "SMTP server connection timed out. Please check your server address.",
-        logs,
-        timestamp: new Date().toLocaleTimeString(),
+      toast({
+        variant: "destructive",
+        title: "SMTP Test Failed",
+        description: "An unexpected error occurred"
       });
-      setStatus("error");
-    } else if (data.host.includes("auth") && (!data.username || !data.password)) {
-      logs.push(`[${new Date().toISOString()}] ERROR: Authentication required`);
-      setResult({
-        success: false,
-        message: "Authentication required. Please provide username and password.",
-        logs,
-        timestamp: new Date().toLocaleTimeString(),
-      });
-      setStatus("error");
-    } else {
-      logs.push(`[${new Date().toISOString()}] Successfully connected to SMTP server`);
-      logs.push(`[${new Date().toISOString()}] Preparing test email from ${data.from} to ${data.to}`);
-      logs.push(`[${new Date().toISOString()}] Email subject: ${data.subject}`);
-      logs.push(`[${new Date().toISOString()}] Email sent successfully`);
-      setResult({
-        success: true,
-        message: "Successfully connected to SMTP server and sent test email!",
-        logs,
-        timestamp: new Date().toLocaleTimeString(),
-      });
-      setStatus("success");
     }
   };
 
